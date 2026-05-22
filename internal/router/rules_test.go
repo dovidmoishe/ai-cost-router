@@ -93,7 +93,10 @@ func TestRouteContinuation(t *testing.T) {
 	d := RouteForUserMessage(
 		"tell me more about that step",
 		defaultTestConfig(),
-		ConversationContext{HasRecentSubstantiveAssistant: true},
+		ConversationContext{
+			HasRecentSubstantiveAssistant: true,
+			AssistantAwaitingUserReply:    false,
+		},
 	)
 	if d.Route != RouteCallModel {
 		t.Fatalf("continuation: %+v", d)
@@ -126,10 +129,72 @@ func TestRouteCoolAfterSubstantive(t *testing.T) {
 	d := RouteForUserMessage(
 		"cool",
 		defaultTestConfig(),
-		ConversationContext{HasRecentSubstantiveAssistant: true},
+		ConversationContext{
+			HasRecentSubstantiveAssistant: true,
+			AssistantAwaitingUserReply:    false,
+		},
 	)
 	if d.Route != RouteBypassModel || d.Reason != ReasonAcknowledgement {
 		t.Fatalf("cool follow-up: %+v", d)
+	}
+}
+
+func TestRouteAwaitingAffirmation(t *testing.T) {
+	ctx := ConversationContext{
+		HasRecentSubstantiveAssistant: true,
+		AssistantAwaitingUserReply:    true,
+	}
+	for _, text := range []string{"okay", "yes", "sure", "go ahead", "sounds good", "yes please"} {
+		d := RouteForUserMessage(text, defaultTestConfig(), ctx)
+		if d.Route != RouteCallModel {
+			t.Fatalf("%q awaiting affirmation: %+v", text, d)
+		}
+	}
+}
+
+func TestRouteAwaitingRejection(t *testing.T) {
+	d := RouteForUserMessage(
+		"not now",
+		defaultTestConfig(),
+		ConversationContext{
+			HasRecentSubstantiveAssistant: true,
+			AssistantAwaitingUserReply:    true,
+		},
+	)
+	if d.Route != RouteCallModel {
+		t.Fatalf("awaiting rejection: %+v", d)
+	}
+}
+
+func TestRouteOkayColdStart(t *testing.T) {
+	d := RouteForUserMessage("ok", defaultTestConfig(), ConversationContext{})
+	if d.Route != RouteBypassModel || d.Reason != ReasonAcknowledgement {
+		t.Fatalf("cold ok: %+v", d)
+	}
+}
+
+func TestIsAwaitingAffirmation(t *testing.T) {
+	for _, text := range []string{"yes please", "okayy", "okiee", "yesss", "yeahh"} {
+		if !isAwaitingAffirmation(text) {
+			t.Fatalf("expected %q to affirm", text)
+		}
+	}
+	if isAwaitingAffirmation("maybe later") {
+		t.Fatal("expected maybe later to not affirm")
+	}
+	if isAwaitingAffirmation("book") {
+		t.Fatal("expected book to not affirm")
+	}
+}
+
+func TestLooseAcknowledgement(t *testing.T) {
+	for _, text := range []string{"okayy", "okiee", "coolll"} {
+		if !isStandaloneAcknowledgement(text) {
+			t.Fatalf("expected %q to ack", text)
+		}
+	}
+	if isStandaloneAcknowledgement("i seek help") {
+		t.Fatal("expected i seek help to not ack")
 	}
 }
 

@@ -42,6 +42,8 @@ curl -s http://localhost:8080/health
 {"status":"ok","service":"ai-cost-router"}
 ```
 
+Every response includes `X-Response-Time-Ms` (server-side duration in milliseconds) and logs `duration_ms` for monitoring.
+
 ### `POST /v1/route`
 
 Requires internal service auth (not required on `/health`):
@@ -58,7 +60,8 @@ Authorization: Bearer <INTERNAL_SERVICE_TOKEN>
 {
   "userText": "hey",
   "conversationContext": {
-    "hasRecentSubstantiveAssistant": false
+    "hasRecentSubstantiveAssistant": false,
+    "assistantAwaitingUserReply": false
   },
   "config": {
     "enabled": true,
@@ -72,7 +75,7 @@ Authorization: Bearer <INTERNAL_SERVICE_TOKEN>
 | Field | Required | Notes |
 |-------|----------|-------|
 | `userText` | yes | Raw user message; may be empty/whitespace (routes to `empty`) |
-| `conversationContext` | no | Defaults to `{ "hasRecentSubstantiveAssistant": false }` |
+| `conversationContext` | no | Nest derives from chat history. `assistantAwaitingUserReply: true` when the last assistant turn expects yes/no (roadmap/quiz confirmations); short replies like `"okay"` then route to `call_model`. |
 | `config` | no | Per-request overrides; server env is the base |
 
 **Response — call model**

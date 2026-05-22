@@ -22,6 +22,7 @@ func main() {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
+	r.Use(appRouter.ResponseTime)
 	r.Use(middleware.Timeout(30 * time.Second))
 
 	r.Get("/health", appRouter.HealthHandler)
