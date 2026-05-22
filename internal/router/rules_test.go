@@ -193,6 +193,9 @@ func TestLooseAcknowledgement(t *testing.T) {
 			t.Fatalf("expected %q to ack", text)
 		}
 	}
+	if isStandaloneAcknowledgement("i seek help") {
+		t.Fatal("expected i seek help to not ack")
+	}
 }
 
 func TestRouteMeta(t *testing.T) {

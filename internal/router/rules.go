@@ -80,7 +80,7 @@ var ackExact = stringSet{
 
 var awaitingAffirmationExact = stringSet{
 	"ok": true, "okay": true, "k": true, "kk": true, "yes": true, "yeah": true, "yep": true,
-	"yup": true, "sure": true, "y": true, "yea": true, "please": true, "go ahead": true, "do it": true,
+	"yup": true, "sure": true, "y": true, "yea": true, "please": true, "yes please": true, "go ahead": true, "do it": true,
 	"sounds good": true, "sound good": true, "that works": true, "let's do it": true, "lets do it": true,
 	"go for it": true, "why not": true, "absolutely": true, "definitely": true, "of course": true,
 	"for sure": true, "okie": true, "aight": true, "alright": true, "all right": true, "correct": true,
@@ -420,6 +420,55 @@ func matchesShortNo(normalized string) bool {
 	return shortNoRE.MatchString(normalized)
 }
 
+func looseTokenMatch(token, stem string) bool {
+	if token == stem {
+		return true
+	}
+	if !strings.HasPrefix(token, stem) {
+		return false
+	}
+	if len(token) > len(stem)+loosePhraseMaxExtra {
+		return false
+	}
+	extra := token[len(stem):]
+	if extra == "" {
+		return true
+	}
+	last := stem[len(stem)-1]
+	for i := 0; i < len(extra); i++ {
+		if extra[i] != last {
+			return false
+		}
+	}
+	return true
+}
+
+func matchesLooseStem(normalized, stem string) bool {
+	stemParts := strings.Fields(stem)
+	msgParts := strings.Fields(normalized)
+	maxLen := len(stem) + loosePhraseMaxExtra*len(stemParts)
+	if len(normalized) > maxLen {
+		return false
+	}
+
+	if len(stemParts) == 1 {
+		if len(msgParts) != 1 {
+			return false
+		}
+		return looseTokenMatch(msgParts[0], stemParts[0])
+	}
+
+	if len(msgParts) != len(stemParts) {
+		return false
+	}
+	for i, part := range stemParts {
+		if !looseTokenMatch(msgParts[i], part) {
+			return false
+		}
+	}
+	return true
+}
+
 func matchesLoosePhrase(
 	normalized string,
 	exact stringSet,
@@ -439,10 +488,7 @@ func matchesLoosePhrase(
 		}
 	}
 	for _, stem := range stems {
-		if !strings.Contains(normalized, stem) {
-			continue
-		}
-		if len(normalized) <= len(stem)+loosePhraseMaxExtra {
+		if matchesLooseStem(normalized, stem) {
 			return true
 		}
 	}

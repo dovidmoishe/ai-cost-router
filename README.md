@@ -42,6 +42,8 @@ curl -s http://localhost:8080/health
 {"status":"ok","service":"ai-cost-router"}
 ```
 
+Every response includes `X-Response-Time-Ms` (server-side duration in milliseconds) and logs `duration_ms` for monitoring.
+
 ### `POST /v1/route`
 
 Requires internal service auth (not required on `/health`):
