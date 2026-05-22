@@ -36,6 +36,7 @@ const (
 // ConversationContext mirrors the Nest ai-cost-router context.
 type ConversationContext struct {
 	HasRecentSubstantiveAssistant bool `json:"hasRecentSubstantiveAssistant"`
+	AssistantAwaitingUserReply    bool `json:"assistantAwaitingUserReply"`
 }
 
 // RouterConfig controls bypass thresholds and feature flags.
@@ -147,7 +148,9 @@ func mergeConfig(base RouterConfig, override *RouterConfigOverride) RouterConfig
 
 func defaultContext(ctx *ConversationContext) ConversationContext {
 	if ctx == nil {
-		return ConversationContext{}
+		return ConversationContext{
+			AssistantAwaitingUserReply: false,
+		}
 	}
 	return *ctx
 }

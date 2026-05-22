@@ -78,6 +78,49 @@ var ackExact = stringSet{
 	"all right": true, "aight": true,
 }
 
+var awaitingAffirmationExact = stringSet{
+	"ok": true, "okay": true, "k": true, "kk": true, "yes": true, "yeah": true, "yep": true,
+	"yup": true, "sure": true, "y": true, "yea": true, "please": true, "go ahead": true, "do it": true,
+	"sounds good": true, "sound good": true, "that works": true, "let's do it": true, "lets do it": true,
+	"go for it": true, "why not": true, "absolutely": true, "definitely": true, "of course": true,
+	"for sure": true, "okie": true, "aight": true, "alright": true, "all right": true, "correct": true,
+	"right": true, "perfect": true, "great": true, "awesome": true, "cool": true, "nice": true, "sweet": true,
+	"got it": true, "understood": true, "i see": true, "isee": true, "makes sense": true, "that makes sense": true,
+	"will do": true, "copy that": true, "roger": true,
+}
+
+var awaitingRejectionExact = stringSet{
+	"no": true, "nope": true, "nah": true, "not now": true, "not yet": true, "wait": true, "stop": true,
+	"cancel": true, "never mind": true, "nevermind": true, "dont": true, "don't": true, "do not": true,
+	"hold on": true, "not really": true,
+}
+
+const loosePhraseMaxExtra = 8
+
+var ackStems = []string{
+	"that makes sense", "makes sense", "fair enough", "fair point", "all right", "okie dokie",
+	"copy that", "got it", "i got it", "right on", "will do", "gotcha", "understood", "awesome",
+	"perfect", "alright", "okay", "okie", "cool", "nice", "sweet", "great", "noted", "roger",
+	"aight", "fire", "sick", "rad", "isee", "i see",
+}
+
+var awaitingAffirmationStems = []string{
+	"that makes sense", "makes sense", "sounds good", "sound good", "let's do it", "lets do it",
+	"go ahead", "that works", "go for it", "of course", "for sure", "why not", "do it", "copy that",
+	"got it", "will do", "understood", "absolutely", "definitely", "awesome", "perfect", "alright",
+	"please", "okay", "okie", "yeah", "sure", "cool", "nice", "sweet", "great", "right", "yes", "yep",
+	"yup", "yea", "roger", "aight", "isee", "i see",
+}
+
+var awaitingRejectionStems = []string{
+	"not really", "never mind", "nevermind", "not now", "not yet", "hold on", "do not", "don't",
+	"dont", "cancel", "stop", "wait", "nope", "nah",
+}
+
+var shortOkRE = regexp.MustCompile(`^ok+$`)
+var shortKRE = regexp.MustCompile(`^k{1,4}$`)
+var shortNoRE = regexp.MustCompile(`^no+$`)
+
 type stringSet map[string]bool
 
 // Rule decides routing for one case. Returning ok=false means try the next rule.
@@ -88,6 +131,7 @@ var defaultRules = []Rule{
 	ruleEmpty,
 	ruleContinuation,
 	ruleNeedsContinuation,
+	ruleAwaitingUserReply,
 	ruleMeta,
 	ruleGreeting,
 	ruleThanks,
@@ -181,6 +225,13 @@ func ruleContinuation(in EvaluateInput) (RouteDecision, bool) {
 
 func ruleNeedsContinuation(in EvaluateInput) (RouteDecision, bool) {
 	if needsContinuationModel(in.Normalized, in.Context) {
+		return RouteDecision{Route: RouteCallModel}, true
+	}
+	return RouteDecision{}, false
+}
+
+func ruleAwaitingUserReply(in EvaluateInput) (RouteDecision, bool) {
+	if shouldCallModelForAwaitingReply(in.Normalized, in.Context) {
 		return RouteDecision{Route: RouteCallModel}, true
 	}
 	return RouteDecision{}, false
@@ -296,10 +347,7 @@ func isChitchat(normalized string) bool {
 }
 
 func isStandaloneAcknowledgement(normalized string) bool {
-	if normalized == "" || len(normalized) > 72 {
-		return false
-	}
-	return ackExact[normalized]
+	return matchesLoosePhrase(normalized, ackExact, ackStems, 72, matchesShortOk, matchesShortK)
 }
 
 func isTooVague(normalized string) bool {
@@ -326,6 +374,75 @@ func needsContinuationModel(normalized string, ctx ConversationContext) bool {
 	}
 	for _, re := range vaguePatterns {
 		if re.MatchString(normalized) && !hasTopicWord(normalized) {
+			return true
+		}
+	}
+	return false
+}
+
+func shouldCallModelForAwaitingReply(normalized string, ctx ConversationContext) bool {
+	if !ctx.AssistantAwaitingUserReply {
+		return false
+	}
+	return isAwaitingAffirmation(normalized) || isAwaitingRejection(normalized)
+}
+
+func isAwaitingAffirmation(normalized string) bool {
+	return matchesLoosePhrase(
+		normalized,
+		awaitingAffirmationExact,
+		awaitingAffirmationStems,
+		72,
+		matchesShortOk,
+		matchesShortK,
+	)
+}
+
+func isAwaitingRejection(normalized string) bool {
+	return matchesLoosePhrase(
+		normalized,
+		awaitingRejectionExact,
+		awaitingRejectionStems,
+		72,
+		matchesShortNo,
+	)
+}
+
+func matchesShortOk(normalized string) bool {
+	return shortOkRE.MatchString(normalized)
+}
+
+func matchesShortK(normalized string) bool {
+	return shortKRE.MatchString(normalized)
+}
+
+func matchesShortNo(normalized string) bool {
+	return shortNoRE.MatchString(normalized)
+}
+
+func matchesLoosePhrase(
+	normalized string,
+	exact stringSet,
+	stems []string,
+	maxLen int,
+	tinyChecks ...func(string) bool,
+) bool {
+	if normalized == "" || len(normalized) > maxLen {
+		return false
+	}
+	if exact[normalized] {
+		return true
+	}
+	for _, check := range tinyChecks {
+		if check(normalized) {
+			return true
+		}
+	}
+	for _, stem := range stems {
+		if !strings.Contains(normalized, stem) {
+			continue
+		}
+		if len(normalized) <= len(stem)+loosePhraseMaxExtra {
 			return true
 		}
 	}
